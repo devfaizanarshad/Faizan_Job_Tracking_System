@@ -1,0 +1,39 @@
+# Secrets and local environment
+.env
+.env.*
+*.env
+!config/*.example.env
+!config/*.env.example
+.pgpass
+pgpass.conf
+credentials*.json
+service-account*.json
+*.pem
+*.key
+
+# Dependencies and caches
+node_modules/
+**/node_modules/
+.npm/
+.cache/
+coverage/
+*.pid
+*.log
+
+# Runtime output
+logs/
+tmp/
+backups/
+exports/
+reports/
+*.backup
+*.dump
+*.bak
+*.sql.gz
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

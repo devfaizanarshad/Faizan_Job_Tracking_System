@@ -1,0 +1,36 @@
+BEGIN;
+INSERT INTO sources(employer_id,source_url,source_type,source_title,claim_category,
+ evidence_summary,evidence_status,source_published_date,checked_at,is_primary,is_stale) VALUES
+(3,'https://www.singular-it.de/jobs/stellenangebot/12/back-end-software-developer-in','Official job advertisement','Back-End Software Developer:in – Werkstudium','student_job',
+ 'Live Lübeck role; 10–20 h/week; hybrid; German C1; Python/PHP/Laravel/Django/Docker/Bash/WordPress/TYPO3.','FACT',NULL,'2026-08-30',TRUE,FALSE),
+(3,'https://www.singular-it.de/leistungen','Official engineering material','singularIT services and technologies','technology',
+ 'Official stack includes PostgreSQL, Python/data/AI, QGIS, React, Next.js, Django, PHP/Laravel and related tooling.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(3,'https://www.singular-it.de/blog/2025/07/die-reise-der-singularit-%F0%9F%8C%9F','Official company publication','singularIT company history','company',
+ 'States Lübeck office opened in 2021 and company had 53 staff at the beginning of 2025.','FACT','2025-07-01','2026-08-30',FALSE,FALSE),
+(85,'https://init-portal-hansecom.rexx-systems.com/Werkstudent-mwd-Geoinformatik-Informatik-de-j1157.html','Official ATS','Werkstudent Geoinformatik / Informatik','student_job',
+ 'Live 15–20h hybrid Hamburg role: OSM/GTFS, GIS, spatial databases, routing; PostGIS/Docker/Linux/cloud/REST advantageous; good German or English.','FACT',NULL,'2026-08-30',TRUE,FALSE),
+(85,'https://hansecom.com/en/career/student-trainee-for-the-mobile-ticketing-team-mwd.html','Official job advertisement','Student Trainee Mobile Ticketing','student_job',
+ 'Live 20h Hamburg role; programming experience and technical enrollment; Docker, Spring Boot and AWS exposure.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(85,'https://hansecom.com/en/career/','Official careers page','HanseCom careers','student_hiring',
+ 'Shows former student-to-product-development conversion, dual students and official unsolicited applications.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(1,'https://www.draeger.com/de_de/Career/Professions/Software-Engineering','Official engineering/careers page','Software engineering at Dräger','technical_function',
+ 'Documents medical and safety software organizations and current software/R&D vacancy families.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(1,'https://erecruitment.draeger.com/index.php?ac=jobad&id=12310','Official job advertisement','R&D software internship/thesis','student_job',
+ 'Live 3–6 month, 35h/week software route in R&D Software or Infrastructure Projects; partial mobile work.','FACT',NULL,'2026-08-30',TRUE,FALSE),
+(2,'https://www.imte.fraunhofer.de/de/karriere-studium/studium.html','Official student careers page','Fraunhofer IMTE for students','student_hiring',
+ 'Official student-assistant, internship, thesis and unsolicited application routes; software/data/AI is a named competence.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(12,'https://www.iti.uni-luebeck.de/en/staff/christian-ewert-m-sc.html','Official institute page','Secure RISC-V HiWi','student_job',
+ 'Open HiWi support sought for development of a secure RISC-V-based processor.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(12,'https://www.iti.uni-luebeck.de/fileadmin/website/Mitarbeiter/Ghofrani/HiWi_UzL.pdf','Official university job advertisement','Intelligent Systems Lab HiWi','student_job',
+ 'English HiWi advert for Java/Arrowhead Tools/Industrial IoT; University of Lübeck enrollment required.','FACT',NULL,'2026-08-30',TRUE,FALSE),
+(12,'https://www.tcs.uni-luebeck.de/de/institut/stellen/','Official institute page','TCS student positions','student_hiring',
+ 'Tutors sought each semester; project jobs frequently available; informal applications welcomed.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(12,'https://www.uni-luebeck.de/structure/sektionen/informatiktechnik/institute.html','Official university directory','Computer science and engineering institutes','organization',
+ 'Official list of 16 MINT institutes, used to scope the 14-unit internal-market map.','FACT',NULL,'2026-08-30',FALSE,FALSE),
+(12,'https://www.inb.uni-luebeck.de/hiwis-mitarbeit-am-inb','Official institute page','INB HiWi administration','student_hiring',
+ 'Current 2026/27 HiWi hiring forms and deadlines prove an active institute-level HiWi mechanism, not a titled vacancy.','FACT',NULL,'2026-08-30',FALSE,FALSE)
+ON CONFLICT (employer_id,source_url,claim_category) DO UPDATE SET
+ source_type=EXCLUDED.source_type,source_title=EXCLUDED.source_title,
+ evidence_summary=EXCLUDED.evidence_summary,evidence_status=EXCLUDED.evidence_status,
+ checked_at=EXCLUDED.checked_at,is_primary=EXCLUDED.is_primary,is_stale=EXCLUDED.is_stale;
+COMMIT;

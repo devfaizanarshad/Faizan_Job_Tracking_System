@@ -1,0 +1,21 @@
+[Unit]
+Description=Faizan employer monitor tier %i
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=faizan-monitor
+Group=faizan-monitor
+WorkingDirectory=/opt/faizan-monitor/current/monitor
+EnvironmentFile=/etc/faizan-monitor/faizan.env
+ExecStart=/usr/bin/node /opt/faizan-monitor/current/monitor/production-runner.js --tiers=%i --trigger=SCHEDULED --mode=SCHEDULED
+TimeoutStartSec=2h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/faizan-monitor /var/lib/faizan-monitor /var/backups/faizan-monitor
+
+[Install]
+WantedBy=multi-user.target

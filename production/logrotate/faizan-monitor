@@ -1,0 +1,11 @@
+/var/log/faizan-monitor/*.jsonl {
+  daily
+  rotate 14
+  size 20M
+  missingok
+  notifempty
+  compress
+  delaycompress
+  copytruncate
+  create 0640 faizan-monitor faizan-monitor
+}

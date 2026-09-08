@@ -1,0 +1,11 @@
+[Unit]
+Description=Tier S monitoring three times daily
+
+[Timer]
+OnCalendar=*-*-* 00,08,16:00:00
+Persistent=true
+RandomizedDelaySec=5m
+Unit=faizan-monitor@S.service
+
+[Install]
+WantedBy=timers.target

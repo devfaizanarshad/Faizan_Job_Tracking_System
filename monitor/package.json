@@ -1,0 +1,37 @@
+{
+  "name": "faizan-employer-monitor",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Conservative official-source opportunity monitoring for the audited S- and A-tier employer sets.",
+  "type": "module",
+  "engines": {
+    "node": "24.18.0",
+    "npm": "11.16.0"
+  },
+  "packageManager": "npm@11.16.0",
+  "scripts": {
+    "monitor": "node run-monitor.js",
+    "report": "node generate-report.js",
+    "report:phase2b": "node generate-phase2b-report.js",
+    "automate": "node automate-run.js",
+    "alerts": "node phase2c-engine.js",
+    "digest": "node phase2c-engine.js --digest-only",
+    "test:phase2c": "node phase2c-tests.js",
+    "report:phase2c": "node generate-phase2c-report.js",
+    "rank": "node ranking-engine.js",
+    "test:phase2d": "node phase2d-tests.js",
+    "report:phase2d": "node generate-phase2d-report.js",
+    "history": "node historical-intelligence-engine.js",
+    "test:phase2e": "node phase2e-tests.js",
+    "report:phase2e": "node generate-phase2e-report.js",
+    "health": "node health-check.js",
+    "backup": "node production-backup.js",
+    "test:phase2f": "node phase2f-tests.js",
+    "test:dr": "node phase2f-disaster-recovery.js",
+    "report:phase2f": "node generate-phase2f-report.js"
+  },
+  "dependencies": {
+    "cheerio": "1.1.2",
+    "pg": "8.16.3"
+  }
+}

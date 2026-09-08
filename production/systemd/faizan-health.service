@@ -1,0 +1,16 @@
+[Unit]
+Description=Faizan monitoring production health check
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=faizan-monitor
+Group=faizan-monitor
+WorkingDirectory=/opt/faizan-monitor/current/monitor
+EnvironmentFile=/etc/faizan-monitor/faizan.env
+ExecStart=/usr/bin/node /opt/faizan-monitor/current/monitor/health-check.js --systemd
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/faizan-monitor /var/lib/faizan-monitor

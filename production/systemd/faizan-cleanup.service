@@ -1,0 +1,13 @@
+[Unit]
+Description=Bound Faizan generated-file retention
+
+[Service]
+Type=oneshot
+User=faizan-monitor
+Group=faizan-monitor
+EnvironmentFile=/etc/faizan-monitor/faizan.env
+ExecStart=/opt/faizan-monitor/current/production/cleanup-retention.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/faizan-monitor /var/lib/faizan-monitor

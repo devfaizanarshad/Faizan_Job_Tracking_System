@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic Faizan production health check
+
+[Timer]
+OnBootSec=10m
+OnUnitActiveSec=15m
+Persistent=true
+Unit=faizan-health.service
+
+[Install]
+WantedBy=timers.target
