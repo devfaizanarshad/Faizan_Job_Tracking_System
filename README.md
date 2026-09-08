@@ -1,4 +1,4 @@
-# Faizan's Germany Werkstudent Employer Intelligence Database
+# Employer Intelligence Database
 
 ## Milestone 1 audited decision surface (2026-08-30)
 
