@@ -10,7 +10,9 @@ Group=faizan-dashboard
 WorkingDirectory=/opt/faizan-dashboard/current/dashboard
 EnvironmentFile=/etc/faizan-dashboard/dashboard.env
 Environment=NODE_OPTIONS=--max-old-space-size=384
-ExecStart=/usr/bin/node /opt/faizan-dashboard/current/dashboard/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+ExecStart=/usr/bin/node /opt/faizan-dashboard/current/dashboard/.next/standalone/server.js
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s
