@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function NotFound() { return <div className="mx-auto max-w-lg py-24 text-center"><p className="text-sm font-semibold text-slate-900">Opportunity not found</p><p className="mt-2 text-sm text-slate-500">It may no longer be available in the monitoring database.</p><Link href="/opportunities" className="mt-5 inline-block text-sm font-semibold text-[var(--accent)]">Return to opportunities</Link></div>; }

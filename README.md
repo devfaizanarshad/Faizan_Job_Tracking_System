@@ -217,3 +217,7 @@ Run the SQL files in this order against a fresh `faizan_employer_intelligence` d
 8. `db/data_corrections.sql`
 
 All hiring evidence was checked on `2026-08-30`. A source can remain useful for employer discovery even when `is_stale = true`; stale evidence must not be treated as a current vacancy.
+
+## Private dashboard
+
+The additive Next.js dashboard lives in `dashboard/`. See `dashboard/README.md` for its read-only architecture, local setup, existing-data mappings, and unexecuted production deployment plan.

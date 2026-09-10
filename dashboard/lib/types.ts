@@ -1,0 +1,33 @@
+export type Section<T> = { data: T; error: string | null };
+export type Status = "healthy" | "degraded" | "down";
+
+export type RankedOpportunity = {
+  opportunity_id: string;
+  company_name: string;
+  title: string;
+  location: string | null;
+  opportunity_type: string | null;
+  role_family: string | null;
+  work_model: string | null;
+  job_url: string | null;
+  status: string;
+  eligibility_status: string | null;
+  language_bucket: string | null;
+  language_requirement: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  latent_fit_score: string | null;
+  actionability_score: string | null;
+  overall_score: string | null;
+  primary_track: string | null;
+  blockers: unknown[] | null;
+  soft_gaps: unknown[] | null;
+  explanation: Record<string, unknown> | null;
+  component_breakdown: Record<string, unknown> | null;
+  missing_requirements: string | null;
+  role_description: string | null;
+  technical_requirements: string | null;
+  preferred_requirements: string | null;
+  enrollment_requirement: string | null;
+  alert_class: string | null;
+};
