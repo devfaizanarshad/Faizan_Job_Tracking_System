@@ -1,0 +1,32 @@
+[Unit]
+Description=Faizan private job intelligence dashboard
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=faizan-dashboard
+Group=faizan-dashboard
+WorkingDirectory=/opt/faizan-dashboard/current/dashboard
+EnvironmentFile=/etc/faizan-dashboard/dashboard.env
+Environment=NODE_OPTIONS=--max-old-space-size=384
+ExecStart=/usr/bin/node /opt/faizan-dashboard/current/dashboard/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/faizan-dashboard /var/log/faizan-dashboard
+
+[Install]
+WantedBy=multi-user.target

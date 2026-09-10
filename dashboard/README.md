@@ -50,12 +50,18 @@ npm run build
 
 ## Production plan (not executed)
 
-1. Pull the reviewed commit onto the VM.
-2. Create a dedicated PostgreSQL login with `CONNECT`, `USAGE` on `public`, and `SELECT` on the existing tables/views only. Do not grant mutation or schema privileges.
+1. Pull the reviewed commit onto the VM, or run the included installer from a trusted checkout:
+
+   ```bash
+   sudo dashboard/deploy-ubuntu.sh
+   ```
+
+   The installer creates a fresh immutable release under `/opt/faizan-dashboard/releases`, leaving the monitoring checkout untouched.
+2. The installer creates a dedicated PostgreSQL login with `CONNECT`, `USAGE` on `public`, and `SELECT` on the existing tables/views only. It grants no mutation or schema privileges.
 3. Create `/etc/faizan-dashboard/dashboard.env`, owned by `root` and readable only by the eventual dashboard service group. Set the environment names shown in `.env.example` with unique production values.
 4. Run `npm ci` and `npm run build` in `dashboard/`.
 5. Run the standalone Next.js server as an unprivileged user, bound to `127.0.0.1` only.
 6. Access it with an authenticated SSH or Google Cloud IAP port tunnel. Do not open the dashboard port or PostgreSQL port in the public firewall.
-7. Only after a manual smoke test, add a dedicated service for the dashboard process. Existing monitor and backup timers remain untouched.
+7. The included `faizan-dashboard.service` runs only the dashboard. Existing monitor and backup timers remain untouched.
 
 The application exposes no restart, run-monitor, delete, edit-environment, or database-write action.
