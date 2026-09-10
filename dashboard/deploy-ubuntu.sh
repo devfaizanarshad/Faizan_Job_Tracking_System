@@ -41,6 +41,7 @@ if [[ ! -f ${env_file} ]]; then
   umask 0027
   cat >"${env_file}" <<EOF
 NODE_ENV=production
+NEXT_TELEMETRY_DISABLED=1
 TZ=Europe/Berlin
 PGHOST=127.0.0.1
 PGPORT=5432
@@ -92,7 +93,7 @@ if [[ ! -d ${release} ]]; then
   rm -rf -- "${partial}"
   git clone --quiet --depth 1 --branch "${branch}" "${repo_url}" "${partial}"
   chown -R "${dashboard_user}:${dashboard_user}" "${partial}"
-  sudo -u "${dashboard_user}" env HOME="${state_dir}" bash -c "set -a; source '${env_file}'; cd '${partial}/dashboard'; npm ci --no-audit --no-fund; npm run build"
+  sudo -u "${dashboard_user}" env HOME="${state_dir}" bash -c "set -a; source '${env_file}'; cd '${partial}/dashboard'; npm ci --include=dev --no-audit --no-fund; npm run build; npm prune --omit=dev --no-audit --no-fund"
   mv "${partial}" "${release}"
   chown -R root:"${dashboard_user}" "${release}"
 fi
