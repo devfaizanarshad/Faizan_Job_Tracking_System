@@ -102,7 +102,8 @@ ln -sfn "${release}" "${app_base}/.current.new"
 mv -Tf "${app_base}/.current.new" "${app_base}/current"
 install -o root -g root -m 0644 "${release}/dashboard/faizan-dashboard.service" /etc/systemd/system/faizan-dashboard.service
 systemctl daemon-reload
-systemctl enable --now faizan-dashboard.service
+systemctl enable faizan-dashboard.service
+systemctl restart faizan-dashboard.service
 
 sudo -u "${dashboard_user}" env PGPASSWORD="${database_password}" psql -X -h 127.0.0.1 -U "${database_user}" -d "${database}" -Atqc "SELECT current_setting('transaction_read_only'),has_table_privilege(current_user,'public.opportunities','SELECT'),has_table_privilege(current_user,'public.opportunities','INSERT')" | grep -qx 'on|t|f'
 for attempt in {1..20}; do
