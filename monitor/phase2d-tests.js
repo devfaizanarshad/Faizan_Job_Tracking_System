@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createRankingPool, scoreOpportunity } from './ranking-engine.js';
+import { buildScenarios, createRankingPool, scoreOpportunity } from './ranking-engine.js';
 
 const now=new Date('2026-09-04T12:00:00Z');
 const current={current_status:'Outside Germany',expected_move:'Germany',target_university:'Universität zu Lübeck',enrollment_status:'NOT_ENROLLED',german_level:'A2',target_german_level:'B1',timezone:'Europe/Berlin'};
 const enrolledB1={...current,current_status:'Germany',enrollment_status:'ENROLLED',german_level:'B1',target_german_level:'B1'};
+const enrolledOutside={...current,enrollment_status:'ENROLLED',employment_authorization_status:'UNKNOWN'};
 const base={opportunity_id:999999,title:'Backend Software Engineer',location:'Hamburg',opportunity_type:'Full-time',employment_type:'Employee',status:'LIVE',verification_status:'LIVE_VERIFIED',language_bucket:'NO_GERMAN_THRESHOLD_STATED',alert_class:'STRONG_MATCH',latent_fit_class:'STRONG_MATCH',technical_match:3,technology_mentions:['PostgreSQL','Node.js','AWS','REST'],technical_requirements:'PostgreSQL Node.js REST APIs',role_description:'Backend engineering',first_seen_at:'2026-09-04T08:00:00Z',source_date:null,source_tier:'A',pattern_observations:0,eligibility_status:'ELIGIBLE_NOW',work_model:'Hybrid'};
 const results=[];
 function check(key,name,condition,evidence){results.push({key,name,status:condition?'PASS':'FAIL',evidence});if(!condition)throw new Error(`${key}: ${evidence}`);}
@@ -15,6 +16,27 @@ try{
   check('A','Enrollment-required exceptional role keeps high latent fit and low actionability',currentScore.latentFitScore>=80&&currentScore.actionabilityScore<=35,`latent=${currentScore.latentFitScore}, actionability=${currentScore.actionabilityScore}`);
   const enrolledScore=scoreOpportunity(futureRole,enrolledB1,{now});
   check('B','Enrollment simulation raises actionability appropriately',enrolledScore.actionabilityScore-currentScore.actionabilityScore>=50&&enrolledScore.actionabilityScore>=80,`current=${currentScore.actionabilityScore}, enrolled=${enrolledScore.actionabilityScore}`);
+  const enrolledOutsideScore=scoreOpportunity(futureRole,enrolledOutside,{now});
+  check('B2','Confirmed enrollment removes only the enrollment penalty while arrival remains a blocker',
+    enrolledOutsideScore.latentFitScore===currentScore.latentFitScore
+      && enrolledOutsideScore.actionabilityScore-currentScore.actionabilityScore===40
+      && enrolledOutsideScore.blockers.some(x=>x.kind==='arrival'),
+    `latent=${enrolledOutsideScore.latentFitScore}, actionability=${enrolledOutsideScore.actionabilityScore}, blockers=${enrolledOutsideScore.blockers.map(x=>x.kind).join(',')}`);
+  const scenarios=buildScenarios(enrolledOutside);
+  check('B3','ARRIVED scenario preserves confirmed enrollment',scenarios.ARRIVED.enrollment_status==='ENROLLED'&&scenarios.ARRIVED.current_status==='Germany',
+    `status=${scenarios.ARRIVED.enrollment_status}, location=${scenarios.ARRIVED.current_status}`);
+  const arrivedActual=scoreOpportunity(futureRole,{...enrolledOutside,current_status:'Germany'},{now});
+  const planningFromOutside=scoreOpportunity(futureRole,buildScenarios(enrolledOutside).PLANNING,{now});
+  const planningFromGermany=scoreOpportunity(futureRole,buildScenarios({...enrolledOutside,current_status:'Germany'}).PLANNING,{now});
+  check('B4','Physical location does not change primary market fit but does change current readiness',
+    planningFromOutside.latentFitScore===planningFromGermany.latentFitScore
+      && enrolledOutsideScore.latentFitScore===arrivedActual.latentFitScore
+      && enrolledOutsideScore.actionabilityScore<arrivedActual.actionabilityScore,
+    `market=${planningFromOutside.latentFitScore}/${planningFromGermany.latentFitScore}, readiness=${enrolledOutsideScore.actionabilityScore}/${arrivedActual.actionabilityScore}`);
+  check('B5','Planning scenario is enrolled and physically available without assuming work authorization',
+    scenarios.PLANNING.enrollment_status==='ENROLLED'&&scenarios.PLANNING.current_status==='Germany'
+      && scenarios.PLANNING.employment_authorization_status==='UNKNOWN',
+    `enrollment=${scenarios.PLANNING.enrollment_status}, location=${scenarios.PLANNING.current_status}, authorization=${scenarios.PLANNING.employment_authorization_status}`);
 
   const c1=scoreOpportunity({...base,language_bucket:'C1',german_requirement_raw:'German C1 required'},enrolledB1,{now});
   check('C','C1-required role remains non-actionable under B1',c1.actionabilityScore<=20&&c1.blockers.some(x=>x.kind==='German'&&x.severity==='HARD'),`actionability=${c1.actionabilityScore}, blocker=${c1.explanation.primary_blocker}`);
@@ -45,7 +67,13 @@ try{
     const irrelevantInTracks=(await client.query(`SELECT count(*)::int n FROM (
       SELECT opportunity_id FROM v_top_backend UNION SELECT opportunity_id FROM v_top_data UNION SELECT opportunity_id FROM v_top_gis UNION SELECT opportunity_id FROM v_top_security
     ) t JOIN opportunities o USING(opportunity_id) WHERE o.alert_class='NOT_RELEVANT'`)).rows[0].n;
-    if(closedInView!==0||irrelevantInTracks!==0) throw new Error(`Live view guard failed: closed=${closedInView}, irrelevant=${irrelevantInTracks}`);
+    const marketMismatch=(await client.query(`SELECT count(*)::int n FROM opportunity_rankings WHERE market_intelligence_score<>latent_fit_score`)).rows[0].n;
+    const planningRows=(await client.query(`SELECT count(*)::int n FROM ranking_scenario_results WHERE scenario_name='PLANNING' AND model_version=$1`,['phase2d-v1.2-market-intelligence'])).rows[0].n;
+    const rankingRows=(await client.query(`SELECT count(*)::int n FROM opportunity_rankings WHERE model_version=$1`,['phase2d-v1.2-market-intelligence'])).rows[0].n;
+    if(closedInView!==0||irrelevantInTracks!==0||marketMismatch!==0||planningRows!==rankingRows)
+      throw new Error(`View/scenario guard failed: closed=${closedInView}, irrelevant=${irrelevantInTracks}, market_mismatch=${marketMismatch}, planning=${planningRows}/${rankingRows}`);
+    check('J','Persisted primary market score is independent of current readiness',marketMismatch===0,`mismatches=${marketMismatch}`);
+    check('K','Every current ranking has an auditable planning scenario',planningRows===rankingRows&&rankingRows>0,`planning=${planningRows}, rankings=${rankingRows}`);
   }finally{client.release();await pool.end();}
 }catch(error){
   if(!results.some(x=>x.status==='FAIL'))results.push({key:'HARNESS',name:'Database view guards',status:'FAIL',evidence:error.stack||String(error)});

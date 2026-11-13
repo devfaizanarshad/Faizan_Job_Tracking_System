@@ -10,7 +10,7 @@ const opportunitySelect = `
     o.work_model,o.job_url,o.status,o.eligibility_status,o.language_bucket,o.language_requirement,
     o.first_seen_at,o.last_seen_at,o.missing_requirements,o.role_description,o.technical_requirements,
     o.preferred_requirements,o.enrollment_requirement,o.alert_class,
-    r.latent_fit_score,r.actionability_score,r.overall_score,r.primary_track,r.blockers,r.soft_gaps,
+    r.latent_fit_score,r.market_intelligence_score,r.actionability_score,r.overall_score,r.primary_track,r.blockers,r.soft_gaps,
     r.explanation,r.component_breakdown
   FROM opportunities o JOIN employers e USING(employer_id)
   LEFT JOIN opportunity_rankings r USING(opportunity_id)`;
@@ -39,7 +39,7 @@ export function actionLabel(opportunity: Pick<RankedOpportunity, "blockers" | "a
 export async function getOverview() {
   const [snapshot, actions, activity, sources, sRun, aRun, backup, alertEngine] = await Promise.all([
     safeQuery<Snapshot>("SELECT * FROM v_market_snapshot_latest"),
-    safeQuery<RankedOpportunity>(`${opportunitySelect} WHERE o.status='LIVE' AND o.alert_class<>'NOT_RELEVANT' ORDER BY r.actionability_score DESC NULLS LAST,r.latent_fit_score DESC NULLS LAST,o.opportunity_id LIMIT 5`),
+    safeQuery<RankedOpportunity>(`${opportunitySelect} WHERE o.status='LIVE' AND o.alert_class<>'NOT_RELEVANT' ORDER BY r.market_intelligence_score DESC NULLS LAST,r.latent_fit_score DESC NULLS LAST,o.opportunity_id LIMIT 5`),
     getActivity(8),
     safeQuery<SourceSummary>(`SELECT count(*)::int enabled,count(*) FILTER(WHERE consecutive_errors=0)::int healthy,count(*) FILTER(WHERE consecutive_errors>=3)::int repeated_failures,count(*) FILTER(WHERE consecutive_errors>0)::int failing FROM monitored_sources WHERE enabled`),
     safeQuery<Run>("SELECT run_id::text,finished_at,status,requested_tiers,sources_attempted,sources_succeeded,opportunities_observed,events_created FROM monitoring_runs WHERE finished_at IS NOT NULL AND requested_tiers @> ARRAY['S']::text[] ORDER BY finished_at DESC LIMIT 1"),
@@ -76,7 +76,10 @@ export async function getOpportunities(filter = "all", location = "", roleFamily
   if (filter === "future") conditions.push("EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(r.blockers,'[]'::jsonb)) b WHERE b->>'severity' IN ('HARD','TEMPORARY'))");
   if (location) { values.push(`%${location}%`); conditions.push(`o.location ILIKE $${values.length}`); }
   if (roleFamily) { values.push(roleFamily); conditions.push(`(o.role_family=$${values.length} OR r.primary_track=$${values.length})`); }
-  return safeQuery<RankedOpportunity>(`${opportunitySelect} WHERE ${conditions.join(" AND ")} ORDER BY r.actionability_score DESC NULLS LAST,r.latent_fit_score DESC NULLS LAST,o.first_seen_at DESC LIMIT 200`, values);
+  const ordering = filter === "apply"
+    ? "r.actionability_score DESC NULLS LAST,r.market_intelligence_score DESC NULLS LAST"
+    : "r.market_intelligence_score DESC NULLS LAST,r.latent_fit_score DESC NULLS LAST";
+  return safeQuery<RankedOpportunity>(`${opportunitySelect} WHERE ${conditions.join(" AND ")} ORDER BY ${ordering},o.first_seen_at DESC LIMIT 200`, values);
 }
 
 export async function getOpportunity(id: string) {

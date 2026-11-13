@@ -4,6 +4,7 @@ import * as cheerio from 'cheerio';
 import pg from 'pg';
 import { productionLog } from './structured-log.js';
 import { databaseConfig } from './database-config.js';
+import { deriveOpportunityReadiness } from './profile-readiness.js';
 
 const { Pool } = pg;
 const TOOL_VERSION = '0.3.0';
@@ -11,7 +12,6 @@ const USER_AGENT = 'FaizanOpportunityMonitor/0.1 (+personal low-frequency employ
 const REQUEST_TIMEOUT_MS = 25000;
 const DETAIL_LIMIT_PER_SOURCE = 15;
 const REQUEST_GAP_MS = Number(process.env.MONITOR_REQUEST_GAP_MS || 350);
-let FAIZAN_ENROLLED = false;
 let FAIZAN_PROFILE = null;
 const MONITOR_LOCK_KEY = 24020301;
 
@@ -355,17 +355,9 @@ function assess(candidate) {
   else if ((/react|typescript|next/i.test(text) && /python|data|api|database/i.test(text)) ||
            (/node|javascript/i.test(text) && /postgres|sql|aws|api/i.test(text))) professional = 3;
   const isStudent = STUDENT_RE.test(`${candidate.title} ${candidate.opportunityType || ''}`) || candidate.employmentType === 'Student';
-  let eligibilityStatus = 'ELIGIBILITY_UNKNOWN';
-  let eligibility = 1;
-  if (candidate.enrollmentRequirement) {
-    eligibilityStatus = FAIZAN_ENROLLED ? 'ELIGIBLE_NOW' : 'ENROLLMENT_REQUIRED';
-    eligibility = FAIZAN_ENROLLED ? 3 : 0;
-  } else if (isStudent && !FAIZAN_ENROLLED) {
-    eligibilityStatus = 'LIKELY_ELIGIBLE_AFTER_ENROLLMENT';
-    eligibility = 0;
-  } else if (!isStudent) {
-    eligibilityStatus = 'ELIGIBILITY_UNKNOWN';
-  }
+  const eligibilityStatus = deriveOpportunityReadiness(candidate,FAIZAN_PROFILE);
+  const enrolled = FAIZAN_PROFILE?.enrollment_status === 'ENROLLED';
+  const eligibility = isStudent ? (enrolled ? 3 : 0) : 1;
   const languageMap = { ENGLISH_EXPLICITLY_ACCEPTED: 3, NO_GERMAN_THRESHOLD_STATED: 2, B1: 3, A2: 3,
     B2: 1, C1: 0, C2: 0, GERMAN_REQUIRED_UNSPECIFIED_LEVEL: 1, UNKNOWN: 1 };
   const language = languageMap[candidate.languageBucket || 'UNKNOWN'] ?? 1;
@@ -379,11 +371,14 @@ function assess(candidate) {
   const latentScore = Math.round((technical*20 + domain*15 + professional*20 + 3*15 + language*10 + location*10 + start*5 + niche*5) / 3 * 100) / 100;
   const fitClass = s => technical === 0 || s < 40 ? 'NOT_RELEVANT' : s >= 80 ? 'EXCEPTIONAL_MATCH' : s >= 65 ? 'STRONG_MATCH' : 'POSSIBLE_MATCH';
   const latentFit = fitClass(latentScore);
-  const alertClass = latentFit === 'NOT_RELEVANT' ? 'NOT_RELEVANT' : (!FAIZAN_ENROLLED && isStudent ? 'MARKET_SIGNAL' : fitClass(score));
+  const alertClass = latentFit === 'NOT_RELEVANT' ? 'NOT_RELEVANT' : (!enrolled && isStudent ? 'MARKET_SIGNAL' : fitClass(score));
   let urgency = alertClass === 'NOT_RELEVANT' ? 'IGNORE' : alertClass === 'MARKET_SIGNAL' ? 'PREPARE_FOR_FUTURE' :
     alertClass === 'EXCEPTIONAL_MATCH' ? 'ACT_WITHIN_48_HOURS' : alertClass === 'STRONG_MATCH' ? 'ACT_THIS_WEEK' : 'MONITOR';
   const gaps = [];
   if (eligibilityStatus === 'ENROLLMENT_REQUIRED') gaps.push('Current enrollment is required; Faizan is not yet enrolled in Germany');
+  if (eligibilityStatus === 'ENROLLED_REQUIRES_ARRIVAL') gaps.push('University enrollment is confirmed; employment start still requires physical arrival in Germany');
+  if (eligibilityStatus === 'ENROLLED_WORK_AUTHORIZATION_UNCONFIRMED') gaps.push('University enrollment is confirmed; work authorization and location feasibility remain unconfirmed');
+  if (eligibilityStatus === 'DOCUMENTATION_REQUIRED') gaps.push('Role-specific documentation or authorization evidence is still required');
   if (['C1','C2'].includes(candidate.languageBucket)) gaps.push(`German ${candidate.languageBucket} is above the expected arrival level`);
   else if (candidate.languageBucket === 'B2') gaps.push('German B2 exceeds the expected arrival level');
   else if (candidate.languageBucket === 'GERMAN_REQUIRED_UNSPECIFIED_LEVEL') gaps.push('German is required but the source gives no CEFR threshold');
@@ -412,7 +407,8 @@ async function createEvent(client, runId, opportunityId, sourceId, eventType, pr
   const key = `${opportunityId || 'page'}|${eventType}`;
   if (eventKeys.has(key)) return 0;
   eventKeys.add(key);
-  const actionable = Boolean(assessment && ['EXCEPTIONAL_MATCH','STRONG_MATCH'].includes(assessment.alertClass) && assessment.eligibilityStatus === 'ELIGIBLE_NOW');
+  const actionable = Boolean(assessment && ['EXCEPTIONAL_MATCH','STRONG_MATCH'].includes(assessment.alertClass)
+    && ['ELIGIBLE_NOW','ELIGIBLE_TO_APPLY'].includes(assessment.eligibilityStatus));
   await client.query(`INSERT INTO opportunity_change_events
     (run_id,opportunity_id,monitored_source_id,event_type,previous_state,new_state,alert_class,urgency,is_actionable)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
@@ -583,9 +579,6 @@ async function main() {
     }
     const profile=await client.query(`SELECT * FROM monitoring_profile WHERE profile_id=TRUE`);
     FAIZAN_PROFILE=profile.rows[0] || null;
-    FAIZAN_ENROLLED=process.env.FAIZAN_ENROLLED===undefined
-      ? FAIZAN_PROFILE?.enrollment_status==='ENROLLED'
-      : /^true$/i.test(process.env.FAIZAN_ENROLLED);
     const prior=await client.query('SELECT count(*)::int n FROM monitoring_runs');
     const mode=requestedMode || (prior.rows[0].n===0?'BASELINE':'MANUAL');
     ({rows:[{run_id:runId}]}=await client.query(`INSERT INTO monitoring_runs(run_mode,requested_tiers,tool_version) VALUES($1,$2,$3) RETURNING run_id`,[mode,tiers,TOOL_VERSION]));
@@ -676,9 +669,9 @@ async function main() {
       await sleep(REQUEST_GAP_MS);
     }
     const status=totals.errors===0?'SUCCEEDED':totals.succeeded>0?'PARTIAL':'FAILED';
-    await client.query(`UPDATE monitoring_runs SET finished_at=now(),status=$2,sources_attempted=$3,sources_succeeded=$4,opportunities_observed=$5,events_created=$6,notes=$7 WHERE run_id=$1`,[runId,status,totals.attempted,totals.succeeded,totals.observed,totals.events,`${totals.errors} source errors; FAIZAN_ENROLLED=${FAIZAN_ENROLLED}`]);
+    await client.query(`UPDATE monitoring_runs SET finished_at=now(),status=$2,sources_attempted=$3,sources_succeeded=$4,opportunities_observed=$5,events_created=$6,notes=$7 WHERE run_id=$1`,[runId,status,totals.attempted,totals.succeeded,totals.observed,totals.events,`${totals.errors} source errors; enrollment_status=${FAIZAN_PROFILE?.enrollment_status || 'UNKNOWN'}`]);
     productionLog('monitor.complete',{run_id:runId,status,...totals});
-    console.log(JSON.stringify({runId,status,...totals,faizanEnrolled:FAIZAN_ENROLLED},null,2));
+    console.log(JSON.stringify({runId,status,...totals,enrollmentStatus:FAIZAN_PROFILE?.enrollment_status || 'UNKNOWN'},null,2));
   } catch(error) {
     if(runId) await client.query(`UPDATE monitoring_runs SET finished_at=now(),status='FAILED',notes=$2 WHERE run_id=$1`,[runId,excerpt(error.stack||error.message,4000)]);
     productionLog('monitor.failure',{run_id:runId,error_class:error.name,error_message:excerpt(error.message,500)},'error');

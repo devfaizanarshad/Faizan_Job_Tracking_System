@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { createPool, decideAlert, getProfile, persistAlertDecision, processRunAlerts, processRunHealth } from './phase2c-engine.js';
+import { createPool, decideAlert, generateDailyDigest, getProfile, persistAlertDecision, processRunAlerts, processRunHealth } from './phase2c-engine.js';
 
 const results=[];
 const record=(key,name,condition,details) => {
@@ -8,7 +9,7 @@ const record=(key,name,condition,details) => {
   if(!condition) throw new Error(`${key} failed: ${details}`);
 };
 
-const pool=createPool(); const client=await pool.connect();
+const pool=createPool(); const client=await pool.connect(); let digestTemp;
 try{
   await client.query('BEGIN');
   const profile=await getProfile(client);
@@ -46,6 +47,21 @@ try{
   record('D','Enrollment-required exceptional match becomes FUTURE/PREPARE',future.priority==='P2'&&future.action==='PREPARE / KEEP WATCHING',
     `priority=${future.priority}, action=${future.action}`);
 
+  const enrolledOutside=decideAlert(event,futureOpportunity,{...profile,current_status:'Outside Germany',enrollment_status:'ENROLLED',employment_authorization_status:'UNKNOWN'});
+  record('D2','Confirmed enrollment does not imply immediate Germany-based work readiness',
+    enrolledOutside.priority==='P2'&&enrolledOutside.eligibility==='ENROLLED_REQUIRES_ARRIVAL',
+    `priority=${enrolledOutside.priority}, eligibility=${enrolledOutside.eligibility}`);
+
+  const enrolledArrived=decideAlert(event,futureOpportunity,{...profile,current_status:'Germany',enrollment_status:'ENROLLED',employment_authorization_status:'CONFIRMED'});
+  record('D3','Enrolled and arrived profile is eligible to apply subject to job requirements',
+    ['P0','P1'].includes(enrolledArrived.priority)&&enrolledArrived.eligibility==='ELIGIBLE_TO_APPLY',
+    `priority=${enrolledArrived.priority}, eligibility=${enrolledArrived.eligibility}`);
+
+  const startMismatch=decideAlert(event,{...futureOpportunity,eligibility_status:'START_DATE_MISMATCH'},enrolledProfile);
+  record('D4','Confirmed enrollment does not erase a job-specific start-date mismatch',
+    startMismatch.priority==='P2'&&startMismatch.eligibility==='START_DATE_MISMATCH',
+    `priority=${startMismatch.priority}, eligibility=${startMismatch.eligibility}`);
+
   const closed=decideAlert({...event,event_type:'JOB_CLOSED'},opportunity,enrolledProfile);
   record('E','Closed role produces a closure decision',closed.alertType==='ROLE_CLOSED'&&closed.priority==='P3',
     `type=${closed.alertType}, priority=${closed.priority}`);
@@ -70,6 +86,16 @@ try{
   record('H','Parser failure is recorded without deleting opportunity history',Boolean(parser)&&before===after,
     `parser=${Boolean(parser)}, before=${before}, after=${after}`);
 
+  digestTemp=await fs.mkdtemp(path.join(os.tmpdir(),'faizan-digest-test-'));
+  const digestDate=new Intl.DateTimeFormat('en-CA',{timeZone:profile.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const digest=await generateDailyDigest(client,{date:digestDate,reportsRoot:digestTemp});
+  const arrivalMentions=(digest.content.match(/ENROLLED_REQUIRES_ARRIVAL/g)||[]).length;
+  record('H2','Daily digest leads with market intelligence and summarizes readiness separately',
+    digest.content.includes('Strongest current market-intelligence opportunities')
+      && digest.content.includes('Application readiness — secondary current-state assessment')
+      && arrivalMentions<=1,
+    `market_heading=${digest.content.includes('Strongest current market-intelligence opportunities')}, arrival_mentions=${arrivalMentions}`);
+
   const lockKey=24020301;
   await client.query('SELECT pg_advisory_lock($1)',[lockKey]);
   const secondClient=await pool.connect();
@@ -82,7 +108,7 @@ try{
 }catch(error){
   await client.query('ROLLBACK');
   if(!results.some(x=>x.status==='FAIL')) results.push({key:'HARNESS',name:'Test harness',status:'FAIL',details:error.stack||String(error)});
-}finally{client.release();await pool.end();}
+}finally{client.release();await pool.end();if(digestTemp)await fs.rm(digestTemp,{recursive:true,force:true});}
 
 const passed=results.filter(x=>x.status==='PASS').length;
 const failed=results.filter(x=>x.status==='FAIL').length;

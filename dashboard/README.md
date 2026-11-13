@@ -11,7 +11,11 @@ Private, read-only dashboard for the existing Germany opportunity-monitoring sys
 - Pages are server rendered. Normal refreshes are sufficient; there is no polling, websocket, chart library, queue, or client state framework.
 - HTTP Basic authentication is enforced in `proxy.ts`. Production access must stay on localhost and travel through an SSH/IAP tunnel so the credentials are never sent over public clear-text HTTP.
 
-No schema or view was added. Presentation labels such as **Apply now**, **Review**, **Future**, **Blocked**, and **Watch** are derived only from the existing `actionability_score`, `eligibility_status`, and stored blocker severities. They are not a new scoring model.
+The default dashboard ordering uses the additive `market_intelligence_score` so
+future technical value is primary. Presentation labels such as **Apply now**,
+**Review**, **Future**, **Blocked**, and **Watch** remain secondary current-state
+readiness labels derived from `actionability_score`, `eligibility_status`, and
+stored blocker severities. The dashboard does not calculate either score.
 
 ## Existing data used
 

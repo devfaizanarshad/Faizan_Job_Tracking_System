@@ -7,6 +7,7 @@ import pg from 'pg';
 import { deliverLocalAlert } from './delivery-adapters.js';
 import { runtimePaths } from './runtime-paths.js';
 import { databaseConfig } from './database-config.js';
+import { deriveOpportunityReadiness, readinessIsTemporaryBlock } from './profile-readiness.js';
 
 const { Pool } = pg;
 const poolConfig = databaseConfig();
@@ -16,19 +17,11 @@ const hash = value => crypto.createHash('sha256').update(String(value)).digest('
 const technicalText = o => clean(`${o.title} ${(o.technology_mentions || []).join(' ')} ${o.technical_requirements} ${o.role_description}`);
 const studentRole = o => /werkstudent|working student|student assistant|studentische|hiwi|internship|praktikum|thesis|abschlussarbeit/i
   .test(`${o.title} ${o.opportunity_type} ${o.employment_type}`);
-const temporaryBlock = status => ['ENROLLMENT_REQUIRED','LIKELY_ELIGIBLE_AFTER_ENROLLMENT','START_DATE_MISMATCH','FUTURE_ARRIVAL'].includes(status);
+const temporaryBlock = readinessIsTemporaryBlock;
 const languageOkay = bucket => ['ENGLISH_EXPLICITLY_ACCEPTED','NO_GERMAN_THRESHOLD_STATED'].includes(bucket);
 
 export function effectiveEligibility(opportunity, profile) {
-  const enrolled = profile?.enrollment_status === 'ENROLLED';
-  if (studentRole(opportunity) || opportunity.enrollment_requirement) {
-    return enrolled ? 'ELIGIBLE_NOW' : 'ENROLLMENT_REQUIRED';
-  }
-  const outsideGermany = /outside germany/i.test(profile?.current_status || '');
-  const germanLocation = /hamburg|lübeck|luebeck|ahrensburg|germany|deutschland/i
-    .test(`${opportunity.location || ''} ${opportunity.work_model || ''}`);
-  if (outsideGermany && germanLocation) return 'FUTURE_ARRIVAL';
-  return opportunity.eligibility_status || 'ELIGIBILITY_UNKNOWN';
+  return deriveOpportunityReadiness(opportunity, profile);
 }
 
 function categoryReasons(opportunity) {
@@ -96,7 +89,7 @@ export function decideAlert(event, opportunity, profile, now = new Date()) {
     priority = 'P2'; action = 'PREPARE / KEEP WATCHING'; alertType = 'FUTURE_HIGH_VALUE';
     reason = `High-value technical fit is blocked by ${blocker}; fit does not override eligibility or language evidence.`;
   } else if (isNew && highValue && !blocked) {
-    const critical = fit === 'EXCEPTIONAL_MATCH' && eligibility === 'ELIGIBLE_NOW'
+    const critical = fit === 'EXCEPTIONAL_MATCH' && ['ELIGIBLE_NOW','ELIGIBLE_TO_APPLY'].includes(eligibility)
       && languageOkay(opportunity.language_bucket) && shortDeadline(opportunity, now);
     priority = critical ? 'P0' : 'P1';
     action = critical ? 'APPLY ASAP' : 'REVIEW TODAY';
@@ -237,32 +230,46 @@ export async function generateDailyDigest(client, { date, reportsRoot = runtimeP
     if (!x.opportunity_id || seenNew.has(String(x.opportunity_id))) return false;
     seenNew.add(String(x.opportunity_id)); return true;
   });
+  const relevantStudentNew = relevantNew.filter(studentRole);
   const changed = events.filter(x => x.opportunity_id && /CHANGED$/.test(x.event_type));
   const closed = events.filter(x => ['JOB_CLOSED','JOB_REMOVED'].includes(x.event_type));
   const { rows: failures } = await client.query(`SELECT DISTINCT e.company_name,ms.source_name,mf.http_status,mf.error_class
     FROM monitoring_fetches mf JOIN monitored_sources ms USING(monitored_source_id) JOIN employers e USING(employer_id)
     WHERE mf.fetched_at >= $1 AND mf.fetched_at < $2 AND NOT mf.success ORDER BY e.company_name`, [bounds.start,bounds.finish]);
   const { rows: best } = await client.query(`WITH ranked AS (
-    SELECT e.company_name,o.*,row_number() OVER(PARTITION BY o.employer_id ORDER BY o.opportunity_priority DESC NULLS LAST) employer_rank
-    FROM opportunities o JOIN employers e USING(employer_id) WHERE o.status='LIVE' AND o.alert_class<>'NOT_RELEVANT')
-    SELECT * FROM ranked WHERE employer_rank<=2 ORDER BY opportunity_priority DESC NULLS LAST LIMIT 7`);
+    SELECT e.company_name,o.*,r.market_intelligence_score,r.primary_track,
+      hm.relevant_opportunities,hm.student_opportunities,hm.confidence AS history_confidence,
+      eis.employer_activity_score,eis.watch_priority_score,
+      row_number() OVER(PARTITION BY o.employer_id ORDER BY r.market_intelligence_score DESC NULLS LAST) employer_rank
+    FROM opportunities o JOIN employers e USING(employer_id) JOIN opportunity_rankings r USING(opportunity_id)
+    LEFT JOIN employer_historical_metrics hm USING(employer_id)
+    LEFT JOIN employer_intelligence_scores eis USING(employer_id)
+    WHERE o.status='LIVE' AND o.latent_fit_class<>'NOT_RELEVANT' AND o.technical_match>0
+      AND (o.opportunity_type~*'Werkstudent|Working Student|Student|HiWi|Internship|Praktikum|Thesis|Abschlussarbeit'
+           OR o.employment_type~*'Student' OR o.enrollment_requirement IS NOT NULL))
+    SELECT * FROM ranked WHERE employer_rank<=2
+    ORDER BY market_intelligence_score DESC NULLS LAST,watch_priority_score DESC NULLS LAST LIMIT 7`);
   const { rows: actionable } = await client.query(`SELECT count(*)::int n FROM alert_decisions
     WHERE created_at >= $1 AND created_at < $2 AND priority IN('P0','P1')`, [bounds.start,bounds.finish]);
   const actionRequired = actionable[0].n > 0;
-  const important = relevantNew.length + changed.length + closed.length > 0;
+  const important = relevantStudentNew.length + changed.length + closed.length > 0;
+  const readinessCounts=best.reduce((counts,x)=>{const key=effectiveEligibility(x,profile);counts[key]=(counts[key]||0)+1;return counts;},{});
+  const readinessSummary=Object.entries(readinessCounts).map(([status,count])=>`${status}: ${count}`).join('; ') || 'No ranked live student opportunities';
   const lines = [`# Daily opportunity digest — ${digestDate}`,'',
     `Profile: ${profile.current_status}; enrollment ${profile.enrollment_status}; German ${profile.german_level} → ${profile.target_german_level}.`,''];
   if (!important) lines.push('## NO HIGH-VALUE CHANGE TODAY.','');
-  lines.push('## 1. Genuinely new relevant opportunities','',listOrNone(relevantNew.slice(0,10).map(x =>
-    `${x.company_name}: ${mdLink(x.title,x.job_url)} — ${x.latent_fit_class}, ${effectiveEligibility(x,profile)}${x.run_mode==='BASELINE'?' (baseline discovery)':''}`)),'',
+  lines.push('## 1. Genuinely new relevant technical student opportunities','',listOrNone(relevantStudentNew.slice(0,10).map(x =>
+    `${x.company_name}: ${mdLink(x.title,x.job_url)} — market fit ${x.latent_fit_class}; language ${x.language_bucket || 'UNKNOWN'}${x.run_mode==='BASELINE'?' (baseline discovery)':''}`)),'',
     '## 2. Material changes','',listOrNone(changed.slice(0,10).map(x => `${x.company_name}: ${x.title} — ${x.event_type}`)),'',
-    '## 3. Closed or removed','',listOrNone(closed.slice(0,10).map(x => `${x.company_name}: ${x.title} — ${x.event_type}`)),'',
+    '## 3. Closed or removed — retained as historical evidence','',listOrNone(closed.slice(0,10).map(x => `${x.company_name}: ${x.title} — ${x.event_type}`)),'',
     '## 4. Source failures','',listOrNone(failures.map(x => `${x.company_name}: ${x.source_name} — ${x.http_status || x.error_class}`)),'',
-    '## 5. Best opportunities currently available','',listOrNone(best.map(x =>
-      `${x.company_name}: ${mdLink(x.title,x.job_url)} — latent ${x.latent_fit_class}; eligibility ${effectiveEligibility(x,profile)}`)),'',
-    '## 6. What Faizan should do today','',actionRequired
+    '## 5. Strongest current market-intelligence opportunities','',listOrNone(best.map(x =>
+      `${x.company_name}: ${mdLink(x.title,x.job_url)} — market ${x.market_intelligence_score}; ${x.primary_track}; language ${x.language_bucket || 'UNKNOWN'}; employer history ${x.history_confidence || 'INSUFFICIENT_DATA'}`)),'',
+    '## 6. Application readiness — secondary current-state assessment','',
+    `- ${readinessSummary}. Current location remains ${profile.current_status}; no arrival or work authorization is assumed.`,'',
+    '## 7. What Faizan should do today','',actionRequired
       ? '- Review the P0/P1 alert files generated today.'
-      : '- No immediate application action. Preserve the strongest future opportunities and prepare for enrollment.','');
+      : '- No immediate application action. Continue collecting relevant market history and prepare for future applications.','');
   const content = lines.join('\n');
   await fs.mkdir(reportsRoot,{recursive:true});
   const outputPath = path.join(reportsRoot,`daily_digest_${digestDate}.md`);
@@ -274,8 +281,8 @@ export async function generateDailyDigest(client, { date, reportsRoot = runtimeP
       window_end=EXCLUDED.window_end,high_value_new_count=EXCLUDED.high_value_new_count,changed_count=EXCLUDED.changed_count,
       closed_count=EXCLUDED.closed_count,source_failure_count=EXCLUDED.source_failure_count,
       action_required=EXCLUDED.action_required,output_path=EXCLUDED.output_path,content_hash=EXCLUDED.content_hash`,
-    [digestDate,profile.timezone,bounds.start,bounds.finish,relevantNew.length,changed.length,closed.length,failures.length,actionRequired,outputPath,hash(content)]);
-  return { digestDate, outputPath, content, highValueNew: relevantNew.length, changed: changed.length,
+    [digestDate,profile.timezone,bounds.start,bounds.finish,relevantStudentNew.length,changed.length,closed.length,failures.length,actionRequired,outputPath,hash(content)]);
+  return { digestDate, outputPath, content, highValueNew: relevantStudentNew.length, changed: changed.length,
     closed: closed.length, failures: failures.length, actionRequired };
 }
 

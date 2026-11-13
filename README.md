@@ -46,9 +46,10 @@ $env:PGPASSWORD='<your local password>'
 ```
 
 Use `-Force -Mode TEST` only for validation. Normal runs respect the source
-cadences stored in `monitored_sources`. Set `FAIZAN_ENROLLED=true` only after
-enrollment is factually complete; otherwise student roles remain future market
-signals and never produce apply-now urgency.
+cadences stored in `monitored_sources`. Enrollment state is read from
+`monitoring_profile`; do not duplicate it in an environment variable. Student
+roles remain visible while readiness separately accounts for enrollment,
+physical arrival, start date, and documentation.
 
 No database password is stored in the repository, and no scheduled Windows task
 is installed automatically. The monitor uses a descriptive user agent, runs
@@ -98,15 +99,21 @@ rebuilding monitoring, for example:
 node .\monitor\update-profile.js --enrollment-status=ENROLLED --german-level=B1
 ```
 
+Profile changes are append-only in `monitoring_profile_history`. Confirmed
+enrollment does not imply physical arrival or work authorization. Keep
+`expected_arrival_date` null until a real date is known.
+
 External email, Telegram, and desktop channels are not enabled and no credential
 is stored. Local terminal and Markdown delivery work without paid infrastructure.
 
 ## Phase 2D: personal opportunity ranking
 
 Apply `db/load_phase2d.sql`, then run `npm run rank` from `monitor`. The
-explainable model stores separate 0–100 latent-fit and actionability scores,
-component evidence, hard/temporary/soft blockers, and four scenario results.
-The real monitoring profile is never mutated by scenario calculation.
+explainable model stores a future-focused `market_intelligence_score` separately
+from current `actionability_score`, plus component evidence and
+hard/temporary/soft blockers. The auditable `PLANNING` scenario assumes enrolled
+and physically available in Germany while leaving work authorization `UNKNOWN`.
+The factual monitoring profile is never mutated by scenario calculation.
 
 Ranking views:
 
@@ -115,6 +122,7 @@ Ranking views:
 - `v_top_10_overall`
 - `v_top_backend`, `v_top_data`, `v_top_gis`, `v_top_security`
 - `v_top_student`, `v_top_english_friendly`
+- `v_market_intelligence_opportunities` (live, closed, and historical evidence)
 
 Monitoring and profile-update commands recalculate rankings automatically after
 the Phase 2D migration is installed. No dashboard, AWS deployment, application,

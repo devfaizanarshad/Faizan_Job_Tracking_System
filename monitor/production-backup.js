@@ -13,6 +13,9 @@ const run=(name,args,options={})=>{const r=spawnSync(pgTool(name),args,{encoding
 const dbConfig=databaseConfig({defaultUser:'faizan_monitor',max:1});
 const db=dbConfig.database,user=dbConfig.user,host=dbConfig.host,port=dbConfig.port;
 const conn=['-h',host,'-p',String(port),'-U',user];
+const verifyUser='postgres';
+const verifyHost='/var/run/postgresql';
+const verifyConn=['-h',verifyHost,'-p',String(port),'-U',verifyUser];
 const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
 const filename=`faizan_employer_intelligence_${stamp}.backup`,finalPath=path.join(runtimePaths.backupDir,filename),partial=`${finalPath}.partial`;
 const retentionDays=Math.max(1,Number(process.env.BACKUP_RETENTION_DAYS||14));
@@ -27,14 +30,14 @@ try{
   let lifecycleCount=null;
   if(restoreVerify){
     const verifyDb=`faizan_backup_verify_${process.pid}_${Date.now()}`.toLowerCase();
-    const exists=run('psql',[...conn,'-d','postgres','-tAc',`SELECT 1 FROM pg_database WHERE datname='${verifyDb}'`]).stdout.trim();
+    const exists=run('psql',[...verifyConn,'-d','postgres','-tAc',`SELECT 1 FROM pg_database WHERE datname='${verifyDb}'`]).stdout.trim();
     if(exists)throw new Error('Generated verification database name unexpectedly exists');
-    run('createdb',[...conn,verifyDb]);
+    run('createdb',[...verifyConn,verifyDb]);
     try{
-      run('pg_restore',[...conn,'-d',verifyDb,'--no-owner','--no-privileges',partial]);
-      const invariant=run('psql',[...conn,'-d',verifyDb,'-tAc',"SELECT count(*) FROM opportunity_lifecycles; SELECT count(*) FROM pg_views WHERE schemaname='public' AND viewname LIKE 'v_%';"]).stdout.trim().split(/\s+/).map(Number);
+      run('pg_restore',[...verifyConn,'-d',verifyDb,'--no-owner','--no-privileges',partial]);
+      const invariant=run('psql',[...verifyConn,'-d',verifyDb,'-tAc',"SELECT count(*) FROM opportunity_lifecycles; SELECT count(*) FROM pg_views WHERE schemaname='public' AND viewname LIKE 'v_%';"]).stdout.trim().split(/\s+/).map(Number);
       lifecycleCount=invariant[0];if(!Number.isFinite(lifecycleCount)||lifecycleCount<74)throw new Error(`Restore invariant failed: lifecycles=${lifecycleCount}`);
-    }finally{run('dropdb',[...conn,'--if-exists',verifyDb]);}
+    }finally{run('dropdb',[...verifyConn,'--if-exists',verifyDb]);}
   }
   await fs.rename(partial,finalPath);
   const bytes=(await fs.stat(finalPath)).size,sha256=crypto.createHash('sha256').update(await fs.readFile(finalPath)).digest('hex');

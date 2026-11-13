@@ -13,8 +13,10 @@ chown -R root:faizan-monitor "$APP_ROOT"
 npm --prefix "$APP_ROOT/monitor" ci --omit=dev
 chown -R root:faizan-monitor "$APP_ROOT/monitor/node_modules"
 set -a; source /etc/faizan-monitor/faizan.env; set +a
+export APP_DB_USER=${PGUSER} APP_DB_NAME=${PGDATABASE} APP_DB_PASSWORD=${PGPASSWORD}
 export PGADMINHOST=/var/run/postgresql PGADMINUSER=postgres PGADMINPASSWORD=
 sudo -u postgres --preserve-env=FAIZAN_APP_ROOT,PGADMINHOST,PGPORT,PGDATABASE,PGADMINUSER node "$APP_ROOT/monitor/migrate-production.js"
+sudo -u postgres --preserve-env=APP_DB_USER,APP_DB_NAME,APP_DB_PASSWORD,PGADMINHOST,PGPORT,PGADMINUSER node "$APP_ROOT/monitor/setup-production-db.js"
 sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run test:phase2c
 sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run test:phase2d
 sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run test:phase2e

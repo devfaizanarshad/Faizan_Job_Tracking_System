@@ -7,11 +7,16 @@ CREATE TABLE IF NOT EXISTS opportunity_score_history (
   profile_hash TEXT NOT NULL,
   captured_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   latent_fit_score NUMERIC(5,2) NOT NULL,
+  market_intelligence_score NUMERIC(5,2) NOT NULL,
   actionability_score NUMERIC(5,2) NOT NULL,
   overall_score NUMERIC(5,2) NOT NULL,
   score_state_hash TEXT NOT NULL,
   UNIQUE(opportunity_id,model_version,profile_hash,score_state_hash)
 );
+
+ALTER TABLE opportunity_score_history ADD COLUMN IF NOT EXISTS market_intelligence_score NUMERIC(5,2);
+UPDATE opportunity_score_history SET market_intelligence_score=latent_fit_score WHERE market_intelligence_score IS NULL;
+ALTER TABLE opportunity_score_history ALTER COLUMN market_intelligence_score SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS opportunity_lifecycles (
   opportunity_id BIGINT PRIMARY KEY REFERENCES opportunities(opportunity_id) ON DELETE CASCADE,
@@ -245,5 +250,18 @@ SELECT e.company_name,m.observation_span_days,m.total_unique_opportunities,m.rel
        ELSE 'Additional longitudinal evidence required' END reason
 FROM employer_historical_metrics m JOIN employers e USING(employer_id)
 WHERE m.confidence='INSUFFICIENT_DATA' ORDER BY e.company_name;
+
+CREATE OR REPLACE VIEW v_market_intelligence_opportunities AS
+SELECT r.*,o.title,o.location,o.opportunity_type,o.language_bucket,o.job_url,o.status,o.verification_status,
+       e.company_name,m.total_unique_opportunities,m.relevant_opportunities,m.student_opportunities,
+       m.most_recent_relevant_at,m.confidence AS history_confidence,
+       s.employer_activity_score,s.faizan_opportunity_history_score,s.watch_priority_score
+FROM opportunity_rankings r
+JOIN opportunities o USING(opportunity_id)
+JOIN employers e USING(employer_id)
+LEFT JOIN employer_historical_metrics m USING(employer_id)
+LEFT JOIN employer_intelligence_scores s USING(employer_id)
+WHERE o.latent_fit_class<>'NOT_RELEVANT'
+ORDER BY r.market_intelligence_score DESC,s.watch_priority_score DESC NULLS LAST,r.latent_fit_score DESC,r.opportunity_id;
 
 COMMIT;

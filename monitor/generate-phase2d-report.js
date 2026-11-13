@@ -36,7 +36,7 @@ try{
   const tests=await fs.readFile(path.resolve('..','reports','phase2d_test_results_2026-09-04.md'),'utf8');
   const blockerCounts={enrollment:0,arrival:0,German:0,seniority:0,other:0,...Object.fromEntries(blockerRows.map(x=>[x.kind,x.n]))};
   const severity=Object.fromEntries(severityRows.map(x=>[x.severity,x.n]));
-  const scenarioNames=['CURRENT','ARRIVED','ENROLLED_B1','ENROLLED_B2'];
+  const scenarioNames=['CURRENT','PLANNING','ARRIVED','ENROLLED_B1','ENROLLED_B2'];
   const scenarioMap=Object.fromEntries(scenarioNames.map(name=>[name,scenarios.filter(x=>x.scenario_name===name)]));
   const scenarioComparison=Array.from({length:10},(_,i)=>[String(i+1),...scenarioNames.map(name=>{
     const r=scenarioMap[name][i];return r?`${r.company_name}: ${r.title} (${r.latent_fit_score}/${r.actionability_score})`:'—';
@@ -78,7 +78,7 @@ try{
     table(['Rank','Employer','Role','Latent','Actionability','Overall'],overall.map((r,i)=>[i+1,r.company_name,link(r.title,r.job_url),r.latent_fit_score,r.actionability_score,r.overall_score])),'',
     '## Scenario comparison','',
     'Each cell shows `latent/actionability`. Scenario calculation writes only to the separate scenario-results table; `monitoring_profile` is not changed.','',
-    table(['Rank','CURRENT','ARRIVED','ENROLLED_B1','ENROLLED_B2'],scenarioComparison),'',
+    table(['Rank','CURRENT','PLANNING','ARRIVED','ENROLLED_B1','ENROLLED_B2'],scenarioComparison),'',
     '## Biggest blockers','',
     'Counts below cover live opportunities with latent fit ≥70. One role can have more than one blocker.','',
     table(['Blocker','Strong opportunities'],[['Enrollment',blockerCounts.enrollment],['Arrival',blockerCounts.arrival],['German',blockerCounts.German],['Seniority',blockerCounts.seniority],['Other / eligibility uncertainty',blockerCounts.other]]),'',

@@ -52,7 +52,7 @@ try {
   lines.push(table(['Employer','Role','Fit after enrollment','Current eligibility','Language','Priority','Urgency'],best.map(x=>[
     x.company_name,link(x.title,x.job_url),x.latent_fit_class,x.eligibility_status,x.language_bucket,x.opportunity_priority,x.monitoring_urgency
   ])),'');
-  lines.push('The strongest three remain HanseCom GIS, HanseCom Mobile Ticketing and Fraunhofer IMTE React/TypeScript. All are classified as `MARKET_SIGNAL` now because the system is running with `FAIZAN_ENROLLED=false`.','');
+  lines.push('The strongest three remain HanseCom GIS, HanseCom Mobile Ticketing and Fraunhofer IMTE React/TypeScript. Readiness is profile-dependent and must be read from the current database profile rather than an environment flag.','');
   lines.push('## Future signals','',
     '- HanseCom GIS: exceptional PostGIS/geospatial/mobility fit; English explicitly accepted.',
     '- Fraunhofer IMTE: exceptional React/TypeScript plus Python/API/data fit; no German threshold stated.',

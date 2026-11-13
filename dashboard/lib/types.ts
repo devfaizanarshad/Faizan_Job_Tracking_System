@@ -17,6 +17,7 @@ export type RankedOpportunity = {
   first_seen_at: string | null;
   last_seen_at: string | null;
   latent_fit_score: string | null;
+  market_intelligence_score: string | null;
   actionability_score: string | null;
   overall_score: string | null;
   primary_track: string | null;

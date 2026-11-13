@@ -6,7 +6,7 @@ import pg from 'pg';
 import { databaseConfig } from './database-config.js';
 
 const {Pool}=pg;
-export const MODEL_VERSION='phase2d-v1.0';
+export const MODEL_VERSION='phase2d-v1.2-market-intelligence';
 export const DIMENSION_MAXIMA={
   technical_fit:18,
   demonstrated_project_overlap:16,
@@ -211,7 +211,8 @@ export function scoreOpportunity(o,profile,{now=new Date()}={}){
 export function buildScenarios(profile){
   return {
     CURRENT:{...profile},
-    ARRIVED:{...profile,current_status:'Germany',enrollment_status:'NOT_ENROLLED'},
+    PLANNING:{...profile,current_status:'Germany',enrollment_status:'ENROLLED',expected_arrival_date:null,employment_authorization_status:'UNKNOWN'},
+    ARRIVED:{...profile,current_status:'Germany'},
     ENROLLED_B1:{...profile,current_status:'Germany',enrollment_status:'ENROLLED',german_level:'B1',target_german_level:'B1'},
     ENROLLED_B2:{...profile,current_status:'Germany',enrollment_status:'ENROLLED',german_level:'B2',target_german_level:'B2'}
   };
@@ -219,7 +220,9 @@ export function buildScenarios(profile){
 
 export function profileHash(profile){
   const stable={current_status:profile.current_status,expected_move:profile.expected_move,target_university:profile.target_university,
-    enrollment_status:profile.enrollment_status,german_level:profile.german_level,target_german_level:profile.target_german_level,timezone:profile.timezone};
+    enrollment_status:profile.enrollment_status,german_level:profile.german_level,target_german_level:profile.target_german_level,timezone:profile.timezone,
+    planned_semester_start_month:profile.planned_semester_start_month,expected_arrival_date:profile.expected_arrival_date,
+    employment_authorization_status:profile.employment_authorization_status,documentation_status:profile.documentation_status};
   return hash(JSON.stringify(stable));
 }
 
@@ -245,22 +248,24 @@ export async function calculateRankings(client,{now=new Date(),persist=true}={})
       [MODEL_VERSION,JSON.stringify(DIMENSION_MAXIMA),JSON.stringify(ACTIONABILITY_RULES)]);
     const currentHash=profileHash(profile);
     for(const {opportunity:o,score:s} of output.CURRENT){
+      const planning=output.PLANNING.find(x=>x.opportunity.opportunity_id===o.opportunity_id).score;
       await client.query(`INSERT INTO opportunity_rankings
-        (opportunity_id,model_version,profile_hash,latent_fit_score,actionability_score,overall_score,primary_track,
-         component_breakdown,blockers,soft_gaps,explanation,freshness_basis,first_seen_by_system,official_posted_date,is_officially_new)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        (opportunity_id,model_version,profile_hash,latent_fit_score,market_intelligence_score,actionability_score,overall_score,primary_track,
+         component_breakdown,blockers,soft_gaps,explanation,planning_scenario_profile,freshness_basis,first_seen_by_system,official_posted_date,is_officially_new)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         ON CONFLICT(opportunity_id) DO UPDATE SET model_version=EXCLUDED.model_version,profile_hash=EXCLUDED.profile_hash,calculated_at=now(),
-          latent_fit_score=EXCLUDED.latent_fit_score,actionability_score=EXCLUDED.actionability_score,overall_score=EXCLUDED.overall_score,
+          latent_fit_score=EXCLUDED.latent_fit_score,market_intelligence_score=EXCLUDED.market_intelligence_score,
+          actionability_score=EXCLUDED.actionability_score,overall_score=EXCLUDED.overall_score,
           primary_track=EXCLUDED.primary_track,component_breakdown=EXCLUDED.component_breakdown,blockers=EXCLUDED.blockers,
-          soft_gaps=EXCLUDED.soft_gaps,explanation=EXCLUDED.explanation,freshness_basis=EXCLUDED.freshness_basis,
+          soft_gaps=EXCLUDED.soft_gaps,explanation=EXCLUDED.explanation,planning_scenario_profile=EXCLUDED.planning_scenario_profile,freshness_basis=EXCLUDED.freshness_basis,
           first_seen_by_system=EXCLUDED.first_seen_by_system,official_posted_date=EXCLUDED.official_posted_date,is_officially_new=EXCLUDED.is_officially_new`,
-        [o.opportunity_id,MODEL_VERSION,currentHash,s.latentFitScore,s.actionabilityScore,s.overallScore,s.primaryTrack,JSON.stringify(s.components),
-          JSON.stringify(s.blockers),JSON.stringify(s.softGaps),JSON.stringify(s.explanation),s.freshnessBasis,s.firstSeenBySystem,s.officialPostedDate,s.isOfficiallyNew]);
-      const scoreStateHash=hash(JSON.stringify({latent:s.latentFitScore,actionability:s.actionabilityScore,overall:s.overallScore}));
+        [o.opportunity_id,MODEL_VERSION,currentHash,s.latentFitScore,planning.latentFitScore,s.actionabilityScore,s.overallScore,s.primaryTrack,JSON.stringify(s.components),
+          JSON.stringify(s.blockers),JSON.stringify(s.softGaps),JSON.stringify(s.explanation),JSON.stringify(scenarios.PLANNING),s.freshnessBasis,s.firstSeenBySystem,s.officialPostedDate,s.isOfficiallyNew]);
+      const scoreStateHash=hash(JSON.stringify({latent:s.latentFitScore,market:planning.latentFitScore,actionability:s.actionabilityScore,overall:s.overallScore}));
       await client.query(`INSERT INTO opportunity_score_history
-        (opportunity_id,model_version,profile_hash,latent_fit_score,actionability_score,overall_score,score_state_hash)
-        VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-        [o.opportunity_id,MODEL_VERSION,currentHash,s.latentFitScore,s.actionabilityScore,s.overallScore,scoreStateHash]);
+        (opportunity_id,model_version,profile_hash,latent_fit_score,market_intelligence_score,actionability_score,overall_score,score_state_hash)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+        [o.opportunity_id,MODEL_VERSION,currentHash,s.latentFitScore,planning.latentFitScore,s.actionabilityScore,s.overallScore,scoreStateHash]);
     }
     for(const [name,rows] of Object.entries(output)) for(const {opportunity:o,score:s} of rows){
       await client.query(`INSERT INTO ranking_scenario_results

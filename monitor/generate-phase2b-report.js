@@ -60,8 +60,8 @@ try{
     JOIN employers e USING(employer_id) WHERE ev.run_id=$1 AND ev.event_type='NEW_JOB' ORDER BY o.opportunity_id`,[baseline.run_id])).rows;
   const classCounts=Object.fromEntries(['EXCEPTIONAL_MATCH','STRONG_MATCH','POSSIBLE_MATCH','MARKET_SIGNAL','NOT_RELEVANT'].map(k=>[k,current.filter(o=>o.alert_class===k).length]));
   const latentCounts=Object.fromEntries(['EXCEPTIONAL_MATCH','STRONG_MATCH','POSSIBLE_MATCH','NOT_RELEVANT'].map(k=>[k,current.filter(o=>o.latent_fit_class===k).length]));
-  const eligibleNow=current.filter(o=>o.eligibility_status==='ELIGIBLE_NOW').length;
-  const future=current.filter(o=>['ENROLLMENT_REQUIRED','LIKELY_ELIGIBLE_AFTER_ENROLLMENT','START_DATE_MISMATCH'].includes(o.eligibility_status)).length;
+  const eligibleNow=current.filter(o=>['ELIGIBLE_NOW','ELIGIBLE_TO_APPLY'].includes(o.eligibility_status)).length;
+  const future=current.filter(o=>['ENROLLMENT_REQUIRED','LIKELY_ELIGIBLE_AFTER_ENROLLMENT','START_DATE_MISMATCH','FUTURE_ARRIVAL','ENROLLED_REQUIRES_ARRIVAL','ENROLLED_WORK_AUTHORIZATION_UNCONFIRMED','DOCUMENTATION_REQUIRED'].includes(o.eligibility_status)).length;
   const errors=(await c.query(`SELECT e.company_name,ms.source_name,ms.source_url,mf.http_status,mf.error_class,mf.error_message
     FROM monitoring_fetches mf JOIN monitored_sources ms USING(monitored_source_id) JOIN employers e USING(employer_id)
     WHERE mf.run_id=$1 AND NOT mf.success ORDER BY e.company_name`,[latest.run_id])).rows;
