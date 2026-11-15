@@ -10,6 +10,7 @@ cp -a "$APP_ROOT" "$ROLLBACK"
 trap 'echo "Update failed. Code retained at '"$ROLLBACK"'. Follow RUNBOOK.md rollback procedure." >&2' ERR
 rsync -a --delete --exclude node_modules --exclude exports --exclude backups --exclude logs --exclude tmp --exclude '*.env' "$SOURCE_DIR/" "$APP_ROOT/"
 chown -R root:faizan-monitor "$APP_ROOT"
+chmod 0750 "$APP_ROOT"/production/*.sh
 npm --prefix "$APP_ROOT/monitor" ci --omit=dev
 chown -R root:faizan-monitor "$APP_ROOT/monitor/node_modules"
 set -a; source /etc/faizan-monitor/faizan.env; set +a
