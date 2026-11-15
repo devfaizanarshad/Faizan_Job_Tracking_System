@@ -20,6 +20,7 @@ export PGADMINHOST=/var/run/postgresql PGADMINUSER=postgres PGADMINPASSWORD=
 sudo -u postgres --preserve-env=FAIZAN_APP_ROOT,PGADMINHOST,PGPORT,PGDATABASE,PGADMINUSER node "$APP_ROOT/monitor/migrate-production.js"
 sudo -u postgres --preserve-env=APP_DB_USER,APP_DB_NAME,APP_DB_PASSWORD,PGADMINHOST,PGPORT,PGADMINUSER node "$APP_ROOT/monitor/setup-production-db.js"
 sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run test:phase2c
+sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run rank
 sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run test:phase2d
 sudo -u faizan-monitor --preserve-env=PGHOST,PGPORT,PGDATABASE,PGUSER,PGPASSWORD npm --prefix "$APP_ROOT/monitor" run test:phase2e
 systemctl start faizan-monitor-s.timer faizan-monitor-a.timer
